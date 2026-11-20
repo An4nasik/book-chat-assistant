@@ -23,6 +23,17 @@ export interface Book {
   fragments: Fragment[]
 }
 
+export interface BookSummary {
+  id: string
+  title: string
+  format: 'txt' | 'fb2'
+  status: BookStatus
+  error?: string
+  createdAt: string
+  chapters: string[]
+  fragmentsCount: number
+}
+
 export interface Source {
   fragmentId: string
   chapter: string

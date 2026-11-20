@@ -77,12 +77,23 @@ test('основной сценарий: загрузка, индексация,
   const fragment = await request(app).get(`/api/books/${bookId}/fragments/f1`)
 
   expect(fragment.body.fragment.chapter).toBe('II')
-  expect(fragment.body.before.map((each: { id: string }) => each.id)).toEqual(['f0'])
-  expect(fragment.body.after).toEqual([])
+  expect(fragment.body.bookTitle).toBe('Ионыч')
 
   const history = await request(app).get(`/api/books/${bookId}/messages`)
 
   expect(history.body.map((message: { role: string }) => message.role)).toEqual(['user', 'assistant'])
+})
+
+test('соседние фрагменты берутся только из той же главы', async () => {
+  const paragraph = 'а'.repeat(400)
+  const text = `I\n${paragraph}\n${paragraph}\n${paragraph}\nII\n${paragraph}\n`
+  const upload = await request(app).post('/api/books').attach('file', Buffer.from(text), 'book.txt')
+  const response = await request(app).get(`/api/books/${upload.body.id}/fragments/f2`)
+  const ids = (list: { id: string }[]): string[] => list.map((each) => each.id)
+
+  expect(response.body.fragment.chapter).toBe('I')
+  expect(ids(response.body.before)).toEqual(['f0', 'f1'])
+  expect(ids(response.body.after)).toEqual([])
 })
 
 test('ошибка индексации переводит книгу в статус error', async () => {
@@ -96,6 +107,16 @@ test('ошибка индексации переводит книгу в ста�
   const question = await request(app).post(`/api/books/${response.body.id}/messages`).send({ question: 'Кто?' })
 
   expect(question.status).toBe(409)
+  expect(question.body.error).toBe('Книгу не удалось проиндексировать: Qdrant недоступен')
+})
+
+test('пока книга индексируется, вопрос получает 409', async () => {
+  jest.mocked(saveVectors).mockReturnValue(new Promise(() => undefined))
+  const upload = await request(app).post('/api/books').attach('file', Buffer.from(BOOK), 'book.txt')
+  const question = await request(app).post(`/api/books/${upload.body.id}/messages`).send({ question: 'Кто?' })
+
+  expect(question.status).toBe(409)
+  expect(question.body.error).toBe('Книга ещё не готова к вопросам')
 })
 
 test('неверные файлы отклоняются с понятной ошибкой', async () => {
@@ -116,8 +137,16 @@ test('неверные файлы отклоняются с понятной о�
   expect(big.body.error).toBe('Файл больше 10 МБ')
 })
 
+test('id с выходом из папки data не читает чужие файлы', async () => {
+  const response = await request(app).get('/api/books/..%2F..%2Fpackage/messages')
+
+  expect(response.status).toBe(404)
+  expect(response.body).toEqual({ error: 'Книга не найдена' })
+})
+
 test('несуществующая книга и фрагмент — 404, пустой вопрос — 400', async () => {
   expect((await request(app).get('/api/books/nope')).status).toBe(404)
+  expect((await request(app).get('/api/books/nope/messages')).status).toBe(404)
   expect((await request(app).get('/api/books/../x')).status).toBe(404)
   expect((await request(app).get('/api/books/nope/fragments/f0')).status).toBe(404)
   expect((await request(app).post('/api/books/nope/messages').send({ question: 'Кто?' })).status).toBe(404)

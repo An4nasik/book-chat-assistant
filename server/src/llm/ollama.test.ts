@@ -1,14 +1,32 @@
 import { chat, embedQuery, embedTexts } from './ollama'
 
-const fetchMock = jest.fn()
+interface FakeResponse {
+  ok: boolean
+  status?: number
+  json?: () => Promise<object>
+  text?: () => Promise<string>
+}
+
+interface SentBody {
+  model: string
+  input: string[]
+  stream: boolean
+  think: boolean
+}
+
+const fetchMock = jest.fn<Promise<FakeResponse>, [string, { body: string }]>()
 
 beforeEach(() => {
   fetchMock.mockReset()
-  global.fetch = fetchMock
+  global.fetch = fetchMock as unknown as typeof fetch
 })
 
-function ok(body: object): object {
+function ok(body: object): FakeResponse {
   return { ok: true, json: async () => body }
+}
+
+function sentBody(call: number): SentBody {
+  return JSON.parse(fetchMock.mock.calls[call][1].body) as SentBody
 }
 
 test('embedTexts отправляет пачки по 32 текста и склеивает векторы', async () => {
@@ -29,16 +47,14 @@ test('embedQuery добавляет инструкцию к вопросу', asy
   fetchMock.mockResolvedValue(ok({ embeddings: [[0.5]] }))
 
   expect(await embedQuery('Кто врач?')).toEqual([0.5])
-  expect(JSON.parse(fetchMock.mock.calls[0][1].body).input[0]).toMatch(/^Instruct: .*\nQuery: Кто врач\?$/)
+  expect(sentBody(0).input[0]).toMatch(/^Instruct: .*\nQuery: Кто врач\?$/)
 })
 
 test('chat выключает режим размышлений и возвращает текст ответа', async () => {
   fetchMock.mockResolvedValue(ok({ message: { content: '  Ответ [1]  ' } }))
 
   expect(await chat([{ role: 'user', content: 'Вопрос' }])).toBe('Ответ [1]')
-  const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-
-  expect(body).toMatchObject({ model: 'qwen3:4b-instruct', stream: false, think: false })
+  expect(sentBody(0)).toMatchObject({ model: 'qwen3:4b-instruct', stream: false, think: false })
 })
 
 test('рассуждения модели до </think> отрезаются', async () => {

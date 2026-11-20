@@ -13,6 +13,12 @@ function chatsDir(): string {
   return path.join(config.dataDir, 'chats')
 }
 
+// id книги — это UUID, поэтому разрешаем только буквы, цифры и дефис:
+// иначе id вида «../../package» вывел бы чтение за пределы папки data.
+function isSafeId(id: string): boolean {
+  return /^[\w-]+$/.test(id)
+}
+
 async function readJson<T>(file: string, fallback: T): Promise<T> {
   try {
     return JSON.parse(await readFile(file, 'utf8')) as T
@@ -27,7 +33,7 @@ export async function saveBook(book: Book): Promise<void> {
 }
 
 export async function loadBook(id: string): Promise<Book | null> {
-  if (!/^[\w-]+$/.test(id)) {
+  if (!isSafeId(id)) {
     return null
   }
 
@@ -51,6 +57,10 @@ export async function listBooks(): Promise<Book[]> {
 }
 
 export async function loadChat(bookId: string): Promise<ChatMessage[]> {
+  if (!isSafeId(bookId)) {
+    return []
+  }
+
   return readJson<ChatMessage[]>(path.join(chatsDir(), `${bookId}.json`), [])
 }
 

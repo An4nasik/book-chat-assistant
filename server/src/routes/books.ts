@@ -6,13 +6,13 @@ import multer from 'multer'
 import { answerQuestion, BadFileError, createBook, indexBook } from '../books/service.js'
 import { appendChat, listBooks, loadBook, loadChat, saveBook } from '../books/store.js'
 
-import type { Book, ChatMessage } from '../types.js'
+import type { Book, BookSummary, ChatMessage, Fragment } from '../types.js'
 
 export const booksRouter = Router()
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
 
-function summary(book: Book): object {
+function summary(book: Book): BookSummary {
   return {
     id: book.id,
     title: book.title,
@@ -45,7 +45,8 @@ booksRouter.post('/', upload.single('file'), async (req, res) => {
 
     await saveBook(book)
     res.status(201).json(summary(book))
-    void indexBook(book)
+    // Индексация идёт в фоне; ошибку записи пишем в лог, чтобы сервер не упал.
+    indexBook(book).catch((error: Error) => console.error('Не удалось сохранить книгу:', error.message))
   } catch (error) {
     const message = error instanceof BadFileError ? error.message : 'Не удалось прочитать файл'
 
@@ -75,20 +76,32 @@ booksRouter.get('/:bookId/fragments/:fragmentId', async (req, res) => {
     return
   }
 
+  // Соседей показываем только из той же главы, иначе текст попадёт под чужой заголовок.
+  const sameChapter = (each: Fragment): boolean => each.chapter === fragment.chapter
+
   res.json({
     bookTitle: book.title,
     fragment,
-    before: book.fragments.slice(Math.max(0, fragment.index - 2), fragment.index),
-    after: book.fragments.slice(fragment.index + 1, fragment.index + 3),
+    before: book.fragments.slice(Math.max(0, fragment.index - 2), fragment.index).filter(sameChapter),
+    after: book.fragments.slice(fragment.index + 1, fragment.index + 3).filter(sameChapter),
   })
 })
 
 booksRouter.get('/:bookId/messages', async (req, res) => {
-  res.json(await loadChat(req.params.bookId))
+  const book = await loadBook(req.params.bookId)
+
+  if (!book) {
+    res.status(404).json({ error: 'Книга не найдена' })
+
+    return
+  }
+
+  res.json(await loadChat(book.id))
 })
 
 booksRouter.post('/:bookId/messages', async (req, res) => {
-  const question = String(req.body?.question ?? '').trim()
+  const body = req.body as { question?: string } | undefined
+  const question = String(body?.question ?? '').trim()
   const book = await loadBook(req.params.bookId)
 
   if (!book) {
@@ -103,7 +116,13 @@ booksRouter.post('/:bookId/messages', async (req, res) => {
     return
   }
 
-  if (book.status !== 'ready') {
+  if (book.status === 'error') {
+    res.status(409).json({ error: `Книгу не удалось проиндексировать: ${book.error}` })
+
+    return
+  }
+
+  if (book.status === 'indexing') {
     res.status(409).json({ error: 'Книга ещё не готова к вопросам' })
 
     return
