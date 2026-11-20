@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { SourcesPanel } from './SourcesPanel'
@@ -46,11 +46,11 @@ test('новые данные заменяют источники, процен�
   expect(screen.getByText('Источник [2]')).toBeInTheDocument()
 })
 
-test('с onOpen клик не уходит по ссылке, а передаёт источник', async () => {
+test('с onOpen клик не уходит по ссылке, а передаёт источник', () => {
   const onOpen = jest.fn()
-  const user = userEvent.setup()
 
   render(<SourcesPanel sources={[source]} onOpen={onOpen} />)
-  await user.click(screen.getByRole('link'))
+  // fireEvent.click возвращает false, если обработчик отменил переход по ссылке.
+  expect(fireEvent.click(screen.getByRole('link'))).toBe(false)
   expect(onOpen).toHaveBeenCalledWith(source)
 })

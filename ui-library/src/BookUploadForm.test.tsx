@@ -16,8 +16,13 @@ test('кнопка активна только после выбора файл�
   expect(screen.getByRole('button', { name: 'Загрузить' })).toBeDisabled()
 })
 
-test('во время загрузки форма заблокирована, ошибка видна', () => {
-  render(<BookUploadForm onUpload={jest.fn()} isUploading error="Поддерживаются только TXT и FB2" />)
+test('во время загрузки форма заблокирована, ошибка видна', async () => {
+  const user = userEvent.setup()
+  const { rerender } = render(<BookUploadForm onUpload={jest.fn()} />)
+
+  await user.upload(screen.getByLabelText('Файл книги (TXT или FB2, до 10 МБ)'), new File(['I'], 'book.txt'))
+  expect(screen.getByRole('button', { name: 'Загрузить' })).toBeEnabled()
+  rerender(<BookUploadForm onUpload={jest.fn()} isUploading error="Поддерживаются только TXT и FB2" />)
   expect(screen.getByRole('button', { name: 'Загрузка…' })).toBeDisabled()
   expect(screen.getByRole('alert')).toHaveTextContent('Поддерживаются только TXT и FB2')
 })

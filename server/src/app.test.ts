@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -94,6 +94,9 @@ test('соседние фрагменты берутся только из то�
   expect(response.body.fragment.chapter).toBe('I')
   expect(ids(response.body.before)).toEqual(['f0', 'f1'])
   expect(ids(response.body.after)).toEqual([])
+  const firstOfChapterTwo = await request(app).get(`/api/books/${upload.body.id}/fragments/f3`)
+
+  expect(ids(firstOfChapterTwo.body.before)).toEqual([])
 })
 
 test('ошибка индексации переводит книгу в статус error', async () => {
@@ -138,7 +141,9 @@ test('неверные файлы отклоняются с понятной о�
 })
 
 test('id с выходом из папки data не читает чужие файлы', async () => {
-  const response = await request(app).get('/api/books/..%2F..%2Fpackage/messages')
+  // Файл лежит в data/, а не в data/books/ — до него можно дойти только через «..».
+  await writeFile(path.join(dataDir, 'secret.json'), '[{"leak":true}]')
+  const response = await request(app).get('/api/books/..%2Fsecret/messages')
 
   expect(response.status).toBe(404)
   expect(response.body).toEqual({ error: 'Книга не найдена' })
