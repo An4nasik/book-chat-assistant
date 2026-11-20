@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+*.tsbuildinfo
+.env
+server/data
+qdrant_storage
+.vite
+.DS_Store
