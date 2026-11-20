@@ -35,13 +35,8 @@ export function ChatWindow({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault()
-    const text = draft.trim()
-
-    if (!text || isTyping) {
-      return
-    }
-
-    onSend(text)
+    // Пустой вопрос сюда не попадёт: пока кнопка отключена, браузер не отправляет форму даже по Enter.
+    onSend(draft.trim())
     setDraft('')
   }
 
