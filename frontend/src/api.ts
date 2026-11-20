@@ -51,13 +51,20 @@ export function chapterTitle(chapter: string): string {
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init)
-  const body = await response.json()
+  let body: T & { error?: string }
+
+  // Если сервер выключен, прокси Vite отвечает не JSON — показываем понятную ошибку.
+  try {
+    body = await response.json() as T & { error?: string }
+  } catch {
+    throw new Error('Сервер недоступен, попробуйте позже')
+  }
 
   if (!response.ok) {
     throw new Error(body.error ?? `Ошибка ${response.status}`)
   }
 
-  return body as T
+  return body
 }
 
 export function listBooks(): Promise<BookSummary[]> {

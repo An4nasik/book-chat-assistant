@@ -58,7 +58,8 @@ export function ChatPage(): ReactElement {
   return (
     <section className="page">
       <h1>{book ? book.title : 'Книга'}</h1>
-      {book && book.status !== 'ready' && <p className="error">Книга ещё не готова к вопросам: статус «{book.status}».</p>}
+      {book?.status === 'indexing' && <p className="error">Книга ещё индексируется. Обновите страницу через несколько секунд.</p>}
+      {book?.status === 'error' && <p className="error">Книгу не удалось проиндексировать: {book.error}</p>}
       {error && <p className="error" role="alert">{error}</p>}
       <div className="chat-layout">
         <ChatWindow messages={messages} onSend={(text: string): void => void handleSend(text)} isTyping={isTyping} />

@@ -6,7 +6,17 @@ import { AppRoutes } from './AppRoutes'
 
 type Handler = (url: string, init?: RequestInit) => { status?: number, body: unknown }
 
-const fetchMock = jest.fn()
+interface FakeResponse {
+  ok: boolean
+  status: number
+  json: () => Promise<unknown>
+}
+
+const fetchMock = jest.fn<Promise<FakeResponse>, [string, RequestInit?]>()
+
+function postBody(): BodyInit | null | undefined {
+  return fetchMock.mock.calls.find((call) => call[1]?.method === 'POST')?.[1]?.body
+}
 
 function mockApi(handler: Handler): void {
   fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -29,7 +39,7 @@ const source = { fragmentId: 'f15', chapter: 'II', text: 'Котик отказ�
 
 beforeEach(() => {
   fetchMock.mockReset()
-  global.fetch = fetchMock
+  global.fetch = fetchMock as unknown as typeof fetch
 })
 
 test('главная: список книг со статусами, ссылка только у готовой', async () => {
@@ -61,7 +71,7 @@ test('главная: загрузка файла отправляет форм�
   await user.upload(screen.getByLabelText('Файл книги (TXT или FB2, до 10 МБ)'), new File(['I'], 'ionych.txt'))
   await user.click(screen.getByRole('button', { name: 'Загрузить' }))
   expect(await screen.findByText('Индексируется…')).toBeInTheDocument()
-  expect(fetchMock.mock.calls.find((call) => call[1]?.method === 'POST')?.[1].body).toBeInstanceOf(FormData)
+  expect(postBody()).toBeInstanceOf(FormData)
   books = [readyBook]
   jest.advanceTimersByTime(2100)
   expect(await screen.findByText('Готова')).toBeInTheDocument()
@@ -110,7 +120,7 @@ test('чат: история, вопрос, ответ с источниками
   await user.type(screen.getByRole('textbox', { name: 'Сообщение' }), 'Почему?{Enter}')
   expect(await screen.findByText('Хотела учиться [1].')).toBeInTheDocument()
   expect(screen.getByText('Глава II')).toBeInTheDocument()
-  expect(JSON.parse(fetchMock.mock.calls.find((call) => call[1]?.method === 'POST')?.[1].body)).toEqual({ question: 'Почему?' })
+  expect(JSON.parse(String(postBody()))).toEqual({ question: 'Почему?' })
   await user.click(screen.getByRole('link', { name: 'Открыть фрагмент: Глава II' }))
   expect(await screen.findByText('Котик отказала.')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: '← К чату' })).toHaveAttribute('href', '/books/b1')
@@ -127,10 +137,24 @@ test('чат: книга не готова и ошибка ответа видн
     return url.endsWith('/messages') ? { body: [] } : { body: { ...readyBook, status: 'indexing' } }
   })
   renderAt('/books/b1')
-  expect(await screen.findByText('Книга ещё не готова к вопросам: статус «indexing».')).toBeInTheDocument()
+  expect(await screen.findByText('Книга ещё индексируется. Обновите страницу через несколько секунд.')).toBeInTheDocument()
   await user.type(screen.getByRole('textbox', { name: 'Сообщение' }), 'Кто?{Enter}')
   expect(await screen.findByRole('alert')).toHaveTextContent('Книга ещё не готова к вопросам')
   await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled())
+})
+
+test('чат: ошибка индексации книги видна сразу', async () => {
+  mockApi((url) => url.endsWith('/messages')
+    ? { body: [] }
+    : { body: { ...readyBook, status: 'error', error: 'Qdrant недоступен' } })
+  renderAt('/books/b1')
+  expect(await screen.findByText('Книгу не удалось проиндексировать: Qdrant недоступен')).toBeInTheDocument()
+})
+
+test('сервер выключен: вместо технической ошибки понятный текст', async () => {
+  fetchMock.mockResolvedValue({ ok: false, status: 500, json: async () => JSON.parse('') })
+  renderAt('/')
+  expect(await screen.findByRole('alert')).toHaveTextContent('Сервер недоступен, попробуйте позже')
 })
 
 test('фрагмент: соседние фрагменты и выделение нужного; ошибка 404', async () => {
