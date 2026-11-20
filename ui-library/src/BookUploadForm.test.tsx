@@ -13,6 +13,7 @@ test('кнопка активна только после выбора файл�
   await user.upload(screen.getByLabelText('Файл книги (TXT или FB2, до 10 МБ)'), file)
   await user.click(screen.getByRole('button', { name: 'Загрузить' }))
   expect(onUpload).toHaveBeenCalledWith(file)
+  expect(screen.getByRole('button', { name: 'Загрузить' })).toBeDisabled()
 })
 
 test('во время загрузки форма заблокирована, ошибка видна', () => {

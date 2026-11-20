@@ -15,6 +15,9 @@ export function BookUploadForm({ onUpload, isUploading = false, error }: BookUpl
 
     if (file) {
       onUpload(file)
+      // Сбрасываем выбор, чтобы ту же книгу случайно не загрузить второй раз.
+      event.currentTarget.reset()
+      setFile(null)
     }
   }
 
