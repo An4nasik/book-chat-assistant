@@ -1,29 +1,73 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
 
 import { ChatWindow, SourcesPanel } from '@book-chat/ui-library'
-import { useParams } from 'react-router'
+import { useNavigate, useParams } from 'react-router'
 
-import type { ChatMessage } from '@book-chat/ui-library'
+import { askQuestion, chapterTitle, getBook, getMessages } from '../api'
+
+import type { BookSummary, Message, Source } from '../api'
+import type { SourceFragment } from '@book-chat/ui-library'
+
+function toPanelSources(bookId: string, sources: Source[]): SourceFragment[] {
+  return sources.map((source: Source) => ({
+    id: source.fragmentId,
+    title: chapterTitle(source.chapter),
+    excerpt: source.text.length > 300 ? `${source.text.slice(0, 300)}…` : source.text,
+    relevance: source.relevance,
+    url: `/books/${bookId}/fragments/${source.fragmentId}`,
+  }))
+}
 
 export function ChatPage(): ReactElement {
   const { bookId = '' } = useParams()
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const navigate = useNavigate()
+  const [book, setBook] = useState<BookSummary | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [isTyping, setIsTyping] = useState<boolean>(false)
+  const [error, setError] = useState<string>('')
+  const lastAnswer = [...messages].reverse().find((message: Message) => message.role === 'assistant')
 
-  function handleSend(text: string): void {
-    setMessages([
-      ...messages,
-      { id: `${messages.length}-q`, role: 'user', text },
-      { id: `${messages.length}-a`, role: 'assistant', text: 'Ответ по книге появится после подключения сервера.' },
-    ])
+  useEffect(() => {
+    Promise.all([getBook(bookId), getMessages(bookId)])
+      .then(([loadedBook, history]) => {
+        setBook(loadedBook)
+        setMessages(history)
+      })
+      .catch((reason: Error) => setError(reason.message))
+  }, [bookId])
+
+  async function handleSend(text: string): Promise<void> {
+    const pending: Message = { id: `pending-${Date.now()}`, role: 'user', text, sources: [] }
+
+    setMessages((current: Message[]) => [...current, pending])
+    setIsTyping(true)
+    setError('')
+
+    try {
+      const result = await askQuestion(bookId, text)
+
+      setMessages((current: Message[]) => [...current.filter((message: Message) => message.id !== pending.id), result.question, result.message])
+    } catch (reason) {
+      setError((reason as Error).message)
+    } finally {
+      setIsTyping(false)
+    }
   }
 
   return (
     <section className="page">
-      <h1>Чат по книге {bookId}</h1>
+      <h1>{book ? book.title : 'Книга'}</h1>
+      {book && book.status !== 'ready' && <p className="error">Книга ещё не готова к вопросам: статус «{book.status}».</p>}
+      {error && <p className="error" role="alert">{error}</p>}
       <div className="chat-layout">
-        <ChatWindow messages={messages} onSend={handleSend} />
-        <SourcesPanel sources={[]} />
+        <ChatWindow messages={messages} onSend={(text: string): void => void handleSend(text)} isTyping={isTyping} />
+        <SourcesPanel
+          sources={toPanelSources(bookId, lastAnswer?.sources ?? [])}
+          onOpen={(source: SourceFragment): void => {
+            void navigate(source.url)
+          }}
+        />
       </div>
     </section>
   )
