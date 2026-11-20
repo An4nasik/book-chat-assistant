@@ -166,12 +166,12 @@ UI-библиотеки (Material UI и т. п.) не используются, 
 | Метод и путь | Ответ |
 | --- | --- |
 | `GET /api/health` | `{ status: 'ok' }` |
-| `GET /api/books` | список книг со статусом |
-| `POST /api/books` | загрузка файла (`file`), `201` и книга со статусом `indexing` |
-| `GET /api/books/:bookId` | книга, статус, главы |
-| `GET /api/books/:bookId/fragments/:fragmentId` | фрагмент и по два соседних до и после |
-| `GET /api/books/:bookId/messages` | история диалога |
-| `POST /api/books/:bookId/messages` | `{ question }` → `{ message, sources }` |
+| `GET /api/books` | список книг: `{ id, title, format, status, error?, createdAt, chapters, fragmentsCount }[]` |
+| `POST /api/books` | загрузка файла (`file`), `201` и книга со статусом `indexing`; неверный файл — `400` |
+| `GET /api/books/:bookId` | книга в том же формате; нет книги — `404` |
+| `GET /api/books/:bookId/fragments/:fragmentId` | `{ bookTitle, fragment, before, after }`: до двух соседних фрагментов той же главы |
+| `GET /api/books/:bookId/messages` | история диалога `{ id, role, text, sources, createdAt }[]` |
+| `POST /api/books/:bookId/messages` | `{ question }` → `{ question, message }`, где `message.sources` — процитированные фрагменты `{ fragmentId, chapter, text, relevance }`; книга не готова — `409`, сбой Ollama или Qdrant — `502` |
 
 ## 6. Как приложение использует библиотеку
 
